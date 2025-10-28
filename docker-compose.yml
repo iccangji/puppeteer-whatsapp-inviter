@@ -1,0 +1,16 @@
+services:
+  whatsapp-inviter:
+    build: ./src
+    container_name: whatsapp-inviter
+    restart: unless-stopped
+    volumes:
+      - ./src:/app
+      - /app/node_modules
+      - ./data:/data 
+    working_dir: /app
+    env_file: 
+      - ./.env
+    ports:
+      - "3000:3000"
+    shm_size: '2gb'
+    command: ["npm", "start"]

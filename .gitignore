@@ -1,0 +1,4 @@
+.env
+/data/inputs/*
+/data/logs/*
+/data/profiles/*
