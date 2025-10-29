@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>View Worker Table</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f8f9fa;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #007bff;
+            color: white;
+        }
+
+        #download-btn {
+            margin: 15px auto;
+            background: #28a745;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #download-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Worker Table</h1>
+    <button id="download-btn">Download XLSX</button>
+    <div id="table-container"></div>
+
+    <script>
+        async function loadTable(workerId) {
+            try {
+                const res = await fetch(`/api/workers/${workerId}/table/view`);
+                if (!res.ok) throw new Error("Failed to fetch table");
+                const { headers, rows } = await res.json();
+
+                const tableContainer = document.getElementById("table-container");
+                const table = document.createElement("table");
+                const thead = document.createElement("thead");
+                const headerRow = document.createElement("tr");
+
+                headers.forEach(h => {
+                    const th = document.createElement("th");
+                    th.textContent = h;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                const tbody = document.createElement("tbody");
+                rows.forEach(r => {
+                    const tr = document.createElement("tr");
+                    headers.forEach(h => {
+                        const td = document.createElement("td");
+                        td.textContent = r[h] || "";
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+
+                tableContainer.innerHTML = "";
+                tableContainer.appendChild(table);
+            } catch (err) {
+                document.getElementById("table-container").innerHTML =
+                    `<p style="color:red;">${err.message}</p>`;
+            }
+        }
+
+        document.getElementById("download-btn").addEventListener("click", () => {
+            window.location.href = `/api/workers/${workerId}/table/download`;
+        });
+
+        const pathParts = window.location.pathname.split("/");
+        const workerId = pathParts[2];
+        console.log(workerId);
+
+        loadTable(workerId);
+    </script>
+</body>
+
+</html>

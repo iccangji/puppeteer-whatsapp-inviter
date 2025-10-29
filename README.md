@@ -5,29 +5,32 @@ This project runs a Node.js container that can manage multiple worker of Puppete
 ## Project strucutre
 ```
 .
-├── docker-compose.yml
-├── src/
-│   ├── index.js
-│   ├── puppeteer.js
-│   ├── server.js
-│   └── utils/
 ├── data/
 │   ├── profiles/
 │   │   ├── worker1/
 │   │   ├── worker2/
 │   │   └── ...
 │   ├── inputs/
-│   │   ├── worker1.csv
-│   │   ├── worker2.csv
+│   │   ├── worker1.xlsx
+│   │   ├── worker2.xlsx
 │   │   └── ...
-├── add-worker.sh
-└── README.md
+│   ├── logs/
+│   │   ├── worker1.log
+│   │   ├── worker2.log
+│   │   └── ...
+├── src/
+│   ├── index.js
+│   ├── puppeteer.js
+│   ├── server.js
+│   └── utils/
+├── .env
+├── docker-compose.yml
 ```
 
 
 ## Features
 - create/delete worker
-- upload CSV per worker
+- view/upload XLSX per worker
 - start/stop worker
 - display QR for WhatsApp login
 - view per-worker logs
@@ -39,14 +42,14 @@ This project runs a Node.js container that can manage multiple worker of Puppete
 
 ## Add new worker:
 1. Click add worker on dashboard 
-2. Upload csv file in created worker
+2. Upload xlsx file in created worker
 
 ## Change delay hours:
 1. Click stop All Worker
 2. Change DELAY_HOURS in .env file
 
 ## Location path
-CSV file: `/data/inputs/worker{id}.csv`
+Table: `/data/inputs/worker{id}.xlsx`
 Profile: `/data/profiles/worker{id}`
 Logs: `/data/logs/worker{id}.log`
 HTML: `/src/public/index.html`

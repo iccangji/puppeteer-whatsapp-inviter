@@ -18,7 +18,7 @@ export function createLogger(workerId = "-main") {
     const logger = winston.createLogger({
         level: "info",
         format: winston.format.combine(
-            winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+            winston.format.timestamp({ format: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) }),
             winston.format.printf(({ level, message, timestamp }) => {
                 return `[${timestamp}] [worker${workerId}] ${level.toUpperCase()}: ${message}`;
             })

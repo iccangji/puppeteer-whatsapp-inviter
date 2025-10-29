@@ -28,12 +28,17 @@
       border-radius: 6px
     }
 
-    pre {
+    #logs {
+      font-family: monospace;
       background: #111;
-      color: #0f0;
-      padding: 10px;
-      height: 200px;
-      overflow: auto
+      padding: 15px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      color: #00ff90;
+      overflow-y: auto;
+      border: 1px solid #333;
+      margin-top: 20px;
+      height: 240px;
     }
   </style>
 </head>
@@ -49,13 +54,18 @@
   <h2>Workers</h2>
   <div id="workers"></div>
 
-  <h2>QR & Logs</h2>
-  <div id="qr"></div>
-  <h3>Logs</h3>
-  <pre id="logs"></pre>
+  <h2>QR</h2>
+  <div id="qr">No QR</div>
+
+  <h2>Logs</h2>
+  <div id="logs"></div>
+
+
 
   <script>
+
     async function load() {
+      // fetch workers
       const res = await fetch('/api/workers');
       const data = await res.json();
       const workersDiv = document.getElementById('workers');
@@ -69,12 +79,16 @@
       <div>
         <button id="btn-start" onclick="start(${id})" ${running ? 'disabled' : ''}>${running ? '▶ Running' : '▶ Start'}</button>
         <button onclick="stop(${id})" >⏹ Stop</button>
-        <button onclick="upload(${id})">📤 Upload CSV</button>
+        <button onclick="logs(${id})">📝 Logs</button>
+        <button onclick="upload(${id})">📤 Upload Table</button>
+        <button onclick="table(${id})">💻 View Table</button>
         <button onclick="del(${id})">🗑 Delete</button>
       </div>
     `;
         workersDiv.appendChild(div);
       });
+
+      pollLogs();
     }
 
     async function createWorker() {
@@ -93,7 +107,7 @@
       alert(`Starting worker ${id}, please wait...`);
       document.getElementById('btn-start').disabled = true;
       document.getElementById('btn-start').innerHTML = '▶ Starting...';
-
+      document.getElementById("qr").innerHTML = `<p>Launching browser, Plese wait...</p>`
       const res = await fetch(`/api/workers/${id}/start`, { method: 'POST' });
       const data = await res.json();
       if (data.qr) {
@@ -121,7 +135,6 @@
           document.getElementById('qr').innerHTML = `<p>✅ Worker ${id} logged in. Starting automation...</p>`;
           // start automation by calling back-end run (it will run in background)
           await fetch(`/api/workers/${id}/run`, { method: 'POST' });
-          pollLogs(id);
           load();
         }
       }
@@ -130,18 +143,28 @@
     async function stop(id) {
       await fetch(`/api/workers/${id}/stop`, { method: 'POST' });
       document.getElementById('qr').innerHTML = '';
-      document.getElementById('logs').textContent = '';
       alert(`Worker ${id} stopped`);
       load();
+    }
+
+    async function pollLogs() {
+      try {
+        const res = await fetch(`/api/workers/-main/logs`);
+        const j = await res.json();
+        const logs = j.logs.join("\n");
+        document.getElementById("logs").textContent = logs || "(no logs yet)";
+      } catch (e) {
+        document.getElementById("logs").textContent = "Error fetching logs.";
+      }
     }
 
     function upload(id) {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.csv';
+      input.accept = '.xlsx';
       input.onchange = async () => {
         const form = new FormData();
-        form.append('csv', input.files[0]);
+        form.append('xlsx', input.files[0]);
         const res = await fetch(`/api/workers/${id}/upload`, { method: 'POST', body: form });
         const j = await res.json();
         alert(j.success ? 'Uploaded' : 'Failed');
@@ -157,11 +180,12 @@
       location.reload();
     }
 
-    async function pollLogs(id) {
-      const res = await fetch(`/api/workers/${id}/logs`);
-      const j = await res.json();
-      document.getElementById('logs').textContent = j.logs.join('\n');
-      setTimeout(() => pollLogs(id), 3000);
+    function table($id) {
+      window.open(`/workers/${$id}/table`, '_blank');
+    }
+
+    function logs($id) {
+      window.open(`/workers/${$id}/logs`, '_blank');
     }
 
     load();
