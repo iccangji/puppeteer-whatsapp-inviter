@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Edit Worker Delay</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <h1>Edit Worker Delay</h1>
+    <label id="workerId"></label>
+
+    <div id="configForm">
+        <h3>Delay Range (minutes)</h3>
+        <label>Delay Random Start</label>
+        <input type="number" id="start" required />
+        <label>Delay Random End</label>
+        <input type="number" id="end" required />
+        <button class="save" onclick="saveConfig()">Save Config</button>
+    </div>
+
+    <script>
+        const pathParts = window.location.pathname.split("/");
+        const id = pathParts[2];
+        async function loadConfig() {
+            const res = await fetch(`/api/workers/${id}/config`);
+            const data = await res.json();
+
+            if (!data.success) {
+                alert("Config not found for worker " + id);
+                return;
+            }
+            document.getElementById("workerId").textContent = `Worker: worker${id}`;
+            document.getElementById("start").value = data.config.delayRandomStart;
+            document.getElementById("end").value = data.config.delayRandomEnd;
+        }
+
+        async function saveConfig() {
+            const delayRandomStart = parseInt(document.getElementById("start").value);
+            const delayRandomEnd = parseInt(document.getElementById("end").value);
+
+            if (isNaN(delayRandomStart) || isNaN(delayRandomEnd)) {
+                alert("Please enter valid numbers.");
+                return;
+            }
+
+            if (delayRandomEnd < delayRandomStart) {
+                alert("Delay end must be greater than or equal to delay start.");
+                return;
+            }
+
+            const res = await fetch(`/api/workers/${id}/config`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ delayRandomStart, delayRandomEnd }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert("Config updated successfully!");
+            } else {
+                alert("Failed to update: " + data.message);
+            }
+        }
+        loadConfig();
+    </script>
+</body>
+
+</html>

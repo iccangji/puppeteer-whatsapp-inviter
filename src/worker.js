@@ -5,13 +5,12 @@ import { createLogger } from "./utils/logger.js";
 import { puppeteerBot } from "./puppeteer.js";
 import XLSX from "xlsx";
 
-const inputsDir = "/data/inputs";
 const id = workerData.id;
-
 const logger = createLogger(id);
+const inputsDir = "/data/inputs";
+const profilesDir = "/data/profiles";
 const tablePath = path.join(inputsDir, `worker${id}.xlsx`);
-const DELAY_HOURS = Number(process.env.DELAY_HOURS || 2);
-const DELAY_MS = DELAY_HOURS * 60 * 60 * 1000;
+
 
 function readTable() {
   if (!fs.existsSync(tablePath)) {
@@ -51,10 +50,21 @@ export function updateRow(current, message) {
   if (idx !== -1) {
     rows[idx] = { ...rows[idx], ...current, status: message, timestamp };
     writeTable(headers, rows);
-    logger.info(`[worker${id}] ✅ Updated member ${current.member} => ${message}`);
+    logger.info(`✅ Updated member ${current.member} => ${message}`);
   } else {
-    logger.warn(`[worker${id}] ⚠️ Member ${current.member} not found in table`);
+    logger.warn(`⚠️ Member ${current.member} not found in table`);
   }
+}
+
+function getDelayMinutes() {
+  const configPath = path.join(profilesDir, `worker${id}`, "config.json");
+  if (!fs.existsSync(configPath)) {
+    return 120; // Default delay minutes
+  }
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  const delay = Math.floor(Math.random() * (config.delayRandomEnd - config.delayRandomStart + 1)) + config.delayRandomStart;
+
+  return delay;
 }
 
 function getNextPending() {
@@ -66,14 +76,21 @@ while (true) {
   try {
     const current = getNextPending();
     if (!current) {
-      logger.info(`[worker${id}] No pending contacts. Worker OFF`);
+      logger.info(`No pending contacts. Worker OFF`);
+      parentPort.postMessage({ id, done: true });
       break;
     }
-    logger.info(`[worker${id}] Processing ${current.member} (${current.phone})`);
+    logger.info(`Processing ${current.member} (${current.phone})`);
     try {
       const { success, message } = await puppeteerBot(id, current);
       if (success) {
         updateRow({ member: current.member }, message);
+        const next = getNextPending();
+        if (!next) {
+          logger.info(`No next contacts. Worker OFF`);
+          parentPort.postMessage({ id, done: true });
+          break;
+        }
       } else {
         logger.error(message)
         parentPort.postMessage({ id, done: false });
@@ -84,13 +101,15 @@ while (true) {
       parentPort.postMessage({ id, done: false });
       break;
     }
-    logger.info(`[worker${id}] ⏳ Delay ${DELAY_HOURS} hours before next`);
-    await new Promise(r => setTimeout(r, DELAY_MS));
+
+
+    const delayMinutes = getDelayMinutes();
+    logger.info(`⏳ Delay ${delayMinutes} minutes before next member`);
+    await new Promise(r => setTimeout(r, delayMinutes * 60 * 1000));
+
   } catch (err) {
     logger.error(err);
     parentPort.postMessage({ id, done: false });
     break;
   }
 }
-
-parentPort.postMessage({ id, done: true });

@@ -306,7 +306,7 @@ export async function closeWorker(workerId) {
             if (fs.existsSync(p)) fs.rmSync(p, { force: true });
         }
 
-        logger.info(`✅ Worker ${workerId} cleaned.`);
+        logger.info(`✅ Worker ${workerId} cleaned`);
 
     } catch (err) { } finally {
         workers.delete(workerId);
@@ -331,6 +331,6 @@ export function cleanAllWorkers() {
         if (fs.existsSync(p)) fs.rmSync(p, { force: true });
     }
 
-    logger.info(`✅ All worker cleaned.`);
+    logger.info(`✅ All worker cleaned`);
     return true;
 }

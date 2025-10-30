@@ -3,75 +3,31 @@
 
 <head>
     <meta charset="UTF-8" />
+    <script src="/socket.io/socket.io.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Worker Logs</title>
-    <style>
-        body {
-            padding: 20px;
-            font-family: Arial, sans-serif;
-        }
-
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-
-        #logs {
-            font-family: monospace;
-            background: #111;
-            padding: 15px;
-            border-radius: 8px;
-            white-space: pre-wrap;
-            color: #00ff90;
-            overflow-y: auto;
-            height: 500px;
-            border: 1px solid #333;
-            margin-top: 20px;
-        }
-
-        .refresh {
-            display: block;
-            background: #28a745;
-            color: #ffffff;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .refresh:hover {
-            background: #218838;
-        }
-    </style>
+    <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
     <h1 id="title">Worker Logs</h1>
-    <button class="refresh" onclick="manualRefresh()">Refresh Now</button>
-    <div id="logs">Loading logs...</div>
+    <div id="logs" class="worker-logs">Loading logs...</div>
 
     <script>
-        async function pollLogs(id) {
-            try {
-                const res = await fetch(`/api/workers/${id}/logs`);
-                const j = await res.json();
-                const logs = j.logs.join("\n");
-                document.getElementById("logs").textContent = logs || "(no logs yet)";
-            } catch (e) {
-                document.getElementById("logs").textContent = "Error fetching logs.";
-            }
-            setTimeout(() => pollLogs(id), 5000);
-        }
-
-        function manualRefresh() {
-            pollLogs(workerId);
-        }
-
+        const socket = io();
         const pathParts = window.location.pathname.split("/");
         const workerId = pathParts[2];
+        document.title = `Worker ${workerId} Logs`;
         document.getElementById("title").textContent = `📜 Worker ${workerId} Logs`;
-
-        pollLogs(workerId);
+        socket.emit("watchWorkerLogs", workerId);
+        socket.on("workerLogs", ({ logs }) => {
+            try {
+                const logsContent = logs.join("\n");
+                document.getElementById("logs").textContent = logsContent || "(no logs yet)";
+            } catch (e) {
+                document.getElementById("logs").textContent = `Error fetching logs: ${e}`;
+            }
+        });
     </script>
 </body>
 

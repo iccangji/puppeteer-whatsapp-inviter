@@ -3,49 +3,17 @@
 
 <head>
   <meta charset="utf-8">
+  <script src="/socket.io/socket.io.js"></script>
   <title>Dashboard</title>
-  <style>
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 20px
-    }
-
-    .worker {
-      background: #fff;
-      border: 1px solid #ddd;
-      padding: 12px;
-      margin-bottom: 8px;
-      border-radius: 6px
-    }
-
-    button {
-      margin-right: 6px
-    }
-
-    #qr img {
-      width: 100%;
-      border: 1px solid #ccc;
-      border-radius: 6px
-    }
-
-    #logs {
-      font-family: monospace;
-      background: #111;
-      padding: 15px;
-      border-radius: 8px;
-      white-space: pre-wrap;
-      color: #00ff90;
-      overflow-y: auto;
-      border: 1px solid #333;
-      margin-top: 20px;
-      height: 240px;
-    }
-  </style>
+  <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
   <h1>Dashboard</h1>
-
+  <button id="logoutBtn" onclick="logout()"
+    style="float:right;background:#f33;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;">
+    Logout
+  </button>
   <div>
     <button onclick="createWorker()">➕ Create Worker</button>
     <button onclick="stopAllWorker()">⏹ Stop All Worker</button>
@@ -63,37 +31,64 @@
 
 
   <script>
-
+    const socket = io();
     async function load() {
-      // fetch workers
       const res = await fetch('/api/workers');
       const data = await res.json();
+
       const workersDiv = document.getElementById('workers');
       workersDiv.innerHTML = '';
       data.profiles.forEach(p => {
+        console.log(p);
+
         const id = p.id;
         const running = data.running.includes(id);
         const div = document.createElement('div');
         div.className = 'worker';
-        div.innerHTML = `<b>${p.name}</b>
+        div.innerHTML = `<div style="margin-bottom: 10px"><b>${p.name}</b>
+        <span id="status-${id}" style="font-weight:bold;margin-bottom:8px;"></span></div>
       <div>
-        <button id="btn-start" onclick="start(${id})" ${running ? 'disabled' : ''}>${running ? '▶ Running' : '▶ Start'}</button>
-        <button onclick="stop(${id})" >⏹ Stop</button>
+        <button id="btn-start-${id}" onclick="start(${id})">▶ Start</button>
+        <button id="btn-stop-${id}" onclick="stop(${id})">⏹ Stop</button>
+        <button onclick="config(${id})">⌛ Delay Time</button>
         <button onclick="logs(${id})">📝 Logs</button>
-        <button onclick="upload(${id})">📤 Upload Table</button>
-        <button onclick="table(${id})">💻 View Table</button>
+        <button onclick="upload(${id})" ${p.isTableExist ? 'disabled' : ''}>📤 Upload Table</button>
+        <button onclick="table(${id})">💻 Report</button>
+        <button onclick="clear(${id})">🧹 Clear</button>
         <button onclick="del(${id})">🗑 Delete</button>
       </div>
     `;
         workersDiv.appendChild(div);
+        socket.emit("watchWorker", id);
+        socket.emit("watchLogs");
       });
-
-      pollLogs();
     }
+
+    socket.on("workerStatus", ({ id, status }) => {
+      if (id && status) {
+        const el = document.getElementById(`status-${id}`);
+        if (el) el.textContent = `(${status})`;
+        const startBtn = document.getElementById(`btn-start-${id}`);
+        const stopBtn = document.getElementById(`btn-stop-${id}`);
+        stopBtn.disabled = (status === 'stopped' || status === 'error' || status === 'done' || status === 'cleaned') || status === 'idle';
+        startBtn.disabled = (status === 'starting' || status === 'running');
+      }
+    });
+
+    socket.on("mainLogs", ({ logs }) => {
+      try {
+        const logsContent = logs.join("\n");
+        document.getElementById("logs").textContent = logsContent || "(no logs yet)";
+      } catch (e) {
+        document.getElementById("logs").textContent = `Error fetching logs: ${e}`;
+      }
+    });
+
+
 
     async function createWorker() {
       await fetch('/api/workers', { method: 'POST' });
-      load();
+      location.reload();
     }
 
     async function stopAllWorker() {
@@ -105,8 +100,6 @@
 
     async function start(id) {
       alert(`Starting worker ${id}, please wait...`);
-      document.getElementById('btn-start').disabled = true;
-      document.getElementById('btn-start').innerHTML = '▶ Starting...';
       document.getElementById("qr").innerHTML = `<p>Launching browser, Plese wait...</p>`
       const res = await fetch(`/api/workers/${id}/start`, { method: 'POST' });
       const data = await res.json();
@@ -116,7 +109,6 @@
       } else {
         document.getElementById('qr').innerHTML = `<p>${data.message || 'Started'}</p>`;
       }
-      load();
     }
 
     async function pollQr(id, retryCount = 0) {
@@ -135,7 +127,6 @@
           document.getElementById('qr').innerHTML = `<p>✅ Worker ${id} logged in. Starting automation...</p>`;
           // start automation by calling back-end run (it will run in background)
           await fetch(`/api/workers/${id}/run`, { method: 'POST' });
-          load();
         }
       }
     }
@@ -144,18 +135,6 @@
       await fetch(`/api/workers/${id}/stop`, { method: 'POST' });
       document.getElementById('qr').innerHTML = '';
       alert(`Worker ${id} stopped`);
-      load();
-    }
-
-    async function pollLogs() {
-      try {
-        const res = await fetch(`/api/workers/-main/logs`);
-        const j = await res.json();
-        const logs = j.logs.join("\n");
-        document.getElementById("logs").textContent = logs || "(no logs yet)";
-      } catch (e) {
-        document.getElementById("logs").textContent = "Error fetching logs.";
-      }
     }
 
     function upload(id) {
@@ -168,24 +147,53 @@
         const res = await fetch(`/api/workers/${id}/upload`, { method: 'POST', body: form });
         const j = await res.json();
         alert(j.success ? 'Uploaded' : 'Failed');
+        location.reload();
       };
       input.click();
     }
 
     async function del(id) {
-      if (!confirm('Delete worker ' + id + '?')) return;
-      const res = await fetch(`/api/workers/${id}`, { method: 'DELETE' });
-      const j = await res.json();
-      alert(j.success ? 'Deleted' : ('Failed: ' + j.message));
-      location.reload();
+      const stopped = await fetch(`/api/workers/${id}/stop`, { method: 'POST' });;
+      if (stopped) {
+        if (!confirm('Delete worker ' + id + '?')) return;
+        const res = await fetch(`/api/workers/${id}`, { method: 'DELETE' });
+        const j = await res.json();
+        alert(j.success ? 'Deleted' : ('Failed: ' + j.message));
+        location.reload();
+      }
     }
 
     function table($id) {
-      window.open(`/workers/${$id}/table`, '_blank');
+      window.location.href = `/workers/${$id}/table`;
     }
 
     function logs($id) {
-      window.open(`/workers/${$id}/logs`, '_blank');
+      window.location.href = `/workers/${$id}/logs`;
+    }
+
+    function config($id) {
+      window.location.href = `/workers/${$id}/config`;
+    }
+
+    async function clear(id) {
+      const stopped = await stop(id);
+      if (stopped) {
+        if (!confirm('Clear ' + id + '?')) return;
+        const res = await fetch(`/api/workers/${id}/clear`, { method: 'POST' });
+        const j = await res.json();
+        alert(j.success ? 'Cleared' : ('Failed: ' + j.message));
+        location.reload();
+      }
+    }
+
+    async function logout() {
+      if (!confirm('Are you sure you want to logout?')) return;
+      const res = await fetch('/logout', { method: 'POST' });
+      if (res.ok) {
+        window.location.href = '/login.html';
+      } else {
+        alert('Logout failed.');
+      }
     }
 
     load();

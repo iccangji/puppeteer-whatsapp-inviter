@@ -1,4 +1,5 @@
 .env
+.todo
 /data/inputs/*
 /data/logs/*
 /data/profiles/*
