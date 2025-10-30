@@ -73,9 +73,6 @@ export async function puppeteerBot(workerId, data) {
             return { success: false, message: "WA Suspend / Log Out" };
         }
 
-        const screenshotPath = `/tmp/screenshot-${Date.now()}.png`;
-        await page.screenshot({ path: screenshotPath });
-
         // Cari grup
         const groupSelector = `span[title="${data.group}"]`;
         const groupElement = await page.$(groupSelector);
@@ -140,11 +137,11 @@ export async function puppeteerBot(workerId, data) {
         // Klik untuk fokus
         await searchInput.click({ clickCount: 2 });
 
-        // Ketik nomor handphone
-        const phoneNumber = data.phone;
-        await page.type(searchInputSelector, phoneNumber, { delay: 100 });
+        // Ketik nama kontak
+        const contactName = data.member;
+        await page.type(searchInputSelector, contactName, { delay: 100 });
 
-        logger.info(`✅ Mengetik nomor: ${phoneNumber}`);
+        logger.info(`✅ Mengetik nama kontak: ${contactName}`);
 
         // Tunggu nomor handphone ditemukan
         await new Promise(r => setTimeout(r, 5 * 1000));
@@ -153,7 +150,7 @@ export async function puppeteerBot(workerId, data) {
         const checkboxes = await page.$$('div[role="checkbox"][aria-checked="false"]');
 
         if (checkboxes.length === 0) {
-            logger.error("❌ Tidak ada checkbox kontak ditemukan.");
+            logger.error("❌ Tidak ada kontak ditemukan.");
             await browser.close();
             return { success: true, message: 'Contact Not Found' };
         }
