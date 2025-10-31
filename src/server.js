@@ -267,12 +267,12 @@ app.post("/api/workers/:id/clear", async (req, res) => {
     const tableFile = path.join(inputsDir, `worker${id}.xlsx`);
     const logFile = path.join(baseLogDir, `worker${id}.log`)
     if (fs.existsSync(tableFile)) fs.unlinkSync(tableFile);
-    if (fs.existsSync(dir)) {
-      for (const file of fs.readdirSync(dir)) {
-        const filePath = path.join(dir, file);
-        fs.rmSync(filePath, { recursive: true, force: true });
-      }
-    }
+    // if (fs.existsSync(dir)) {
+    //   for (const file of fs.readdirSync(dir)) {
+    //     const filePath = path.join(dir, file);
+    //     fs.rmSync(filePath, { recursive: true, force: true });
+    //   }
+    // }
     if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
     return res.json({ success: true });
   } catch (e) {
