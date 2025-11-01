@@ -49,19 +49,18 @@
         const div = document.createElement('div');
         div.className = 'worker';
         div.innerHTML = `<div style="margin-bottom: 10px"><b>${p.name}</b>
-        <span id="status-${id}" style="font-weight:bold;margin-bottom:16px;"></span>
-        <div style="margin-bottom: 10px">
-        <span id="qrLoggedIn-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
-        <span id="delay-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
-        <span id="queue-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
-        <span id="note-${id}" style="font-weight:bold;margin-bottom:8px;"></span></div>
+        <span id="status-${id}" style="margin-bottom:16px;"></span>
+        <span id="qrLoggedIn-${id}" style="margin-bottom:8px;"></span>
+        <span id="delay-${id}" style="margin-bottom:8px;"></span>
+        <span id="queue-${id}" style="margin-bottom:8px;"></span>
+        <span id="note-${id}" style="margin-bottom:8px;"></span>
         </div>
       <div>
         <button id="btn-start-${id}" onclick="start(${id})">▶ Start</button>
         <button id="btn-stop-${id}" onclick="stop(${id})">⏹ Stop</button>
         <button id="btn-config-${id}" onclick="edit(${id})">⚙ Edit</button>
         <button onclick="logs(${id})">📝 Logs</config>
-        <button id="btn-upload-${id}" onclick="upload(${id})" ${p.isTableExist ? 'disabled' : ''}>📤 Upload Table</button>
+        <button id="btn-upload-${id}" onclick="upload(${id})" ${p.isTableExist ? 'disabled' : ''}>📤 Upload Contacts</button>
         <button id="btn-report-${id}" onclick="table(${id})">💻 Report</button>
         <button id="btn-clear-${id}" onclick="clearWorker(${id})">🧹 Clear</button>
         <button id="btn-delete-${id}" onclick="del(${id})">🗑 Delete</button>
@@ -77,7 +76,17 @@
     socket.on("workerStatus", ({ id, status }) => {
       if (id && status) {
         const el = document.getElementById(`status-${id}`);
-        if (el) el.textContent = `(${status})`;
+        if (status === 'stopped' || status === 'error') {
+          if (el) el.textContent = `(🔴 ${status})`;
+        }
+        else if (status === "idle" || status === "done") {
+          if (el) el.textContent = `(🟡 ${status})`;
+        }
+        else {
+          if (el) el.textContent = `(🟢 ${status})`;
+        }
+
+
         const startBtn = document.getElementById(`btn-start-${id}`);
         const stopBtn = document.getElementById(`btn-stop-${id}`);
         const configBtn = document.getElementById(`btn-config-${id}`);
@@ -87,21 +96,18 @@
         if (status === 'stopped' || status === 'error' || status === 'cleaned' || status === 'idle') {
           startBtn.disabled = false || !uploadBtn.disabled;
           stopBtn.disabled = true;
-          configBtn.disabled = false;
           clearBtn.disabled = false;
           deleteBtn.disabled = false;
         }
         if (status === "done") {
           startBtn.disabled = true;
           stopBtn.disabled = true;
-          configBtn.disabled = false;
           clearBtn.disabled = false;
           deleteBtn.disabled = false;
         }
         if (status === 'starting' || status === 'running') {
           stopBtn.disabled = false;
           startBtn.disabled = true;
-          configBtn.disabled = true;
           clearBtn.disabled = true;
           deleteBtn.disabled = true;
         }
@@ -127,10 +133,10 @@
         const noteEl = document.getElementById(`note-${id}`);
         uploadBtn.disabled = config.isTableExist;
         reportBtn.disabled = !config.isTableExist;
-        qrLoggedInEl.textContent = config.qrLoggedIn ? `(QR Logged In)` : '(QR Logged Out)';
-        delayEl.textContent = `(Delay: ${config.delayRandomStart}- ${config.delayRandomEnd} Minutes)`;
-        queueEl.textContent = `(Queue: ${config.queue} Contacts)`;
-        noteEl.textContent = config.note ? `(Note: ${config.note})` : '(Note: -)';
+        qrLoggedInEl.innerHTML = `(QR Logged ${config.qrLoggedIn ? '<strong style="color: green">IN</strong>' : '<strong style="color: red">OUT</strong>'})`;
+        delayEl.innerHTML = `(Delay: <strong>${config.delayRandomStart}-${config.delayRandomEnd}</strong> Minutes)`;
+        queueEl.innerHTML = `(Queue: <strong>${config.queue}</strong> Contacts)`;
+        noteEl.innerHTML = config.note ? `(Note: <strong>${config.note}</strong>)` : '(Note: -)';
       }
     });
 

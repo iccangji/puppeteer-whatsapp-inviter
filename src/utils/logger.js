@@ -15,10 +15,12 @@ function pruneOldLogs() {
     try {
         const lines = fs.readFileSync(LOG_PATH, "utf8").split("\n");
         const filtered = lines.filter(line => {
-            const match = line.match(/\[(\d{1,2})\/(\d{1,2})\/(\d{4}), (\d{2})\.(\d{2})\.(\d{2})\]/);
+            const match = line.match(/\[(\d{2}):(\d{2}):(\d{4}) (\d{2}):(\d{2}):(\d{2})\]/);
             if (!match) return true;
+
             const [_, d, m, y, h, min, s] = match;
-            const ts = new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${h}:${min}:${s}+07:00`);
+            const ts = new Date(`${y}-${m}-${d}T${h}:${min}:${s}+07:00`);
+
             return ts.getTime() >= cutoff;
         });
 
@@ -36,7 +38,18 @@ export function createLogger(workerId = "-main") {
         level: "info",
         format: winston.format.combine(
             winston.format.timestamp({
-                format: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
+                format: () => {
+                    const now = new Date();
+                    const timeNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+                    const day = String(timeNow.getDate()).padStart(2, "0");
+                    const month = String(timeNow.getMonth() + 1).padStart(2, "0");
+                    const year = timeNow.getFullYear();
+                    const hour = String(timeNow.getHours()).padStart(2, "0");
+                    const minute = String(timeNow.getMinutes()).padStart(2, "0");
+                    const second = String(timeNow.getSeconds()).padStart(2, "0");
+
+                    return `${day}:${month}:${year} ${hour}:${minute}:${second}`;
+                },
             }),
             winston.format.printf(({ level, message, timestamp }) => {
                 return `[${timestamp}] [${baseName}] ${level.toUpperCase()}: ${message}`;

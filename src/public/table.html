@@ -10,10 +10,16 @@
 
 <body>
     <h1>Worker Table</h1>
-    <button id="download-btn">Download XLSX</button>
+    <div style="display: flex; justify-content: center; align-items: center; float: left; margin-bottom: 10px;">
+        <button id="download-btn" onclick="downloadTable()">Download XLSX</button>
+        <button id="download-btn" onclick="getPrivateTable()">Download contact PRIVATE TXT</button>
+    </div>
     <div id="table-container"></div>
 
     <script>
+        const pathParts = window.location.pathname.split("/");
+        const workerId = pathParts[2];
+
         async function loadTable(workerId) {
             try {
                 const res = await fetch(`/api/workers/${workerId}/table/view`);
@@ -27,7 +33,26 @@
 
                 headers.forEach(h => {
                     const th = document.createElement("th");
-                    th.textContent = h;
+                    switch (h) {
+                        case "member":
+                            th.textContent = "Contact Name";
+                            break;
+                        case "phone":
+                            th.textContent = "Phone Number";
+                            break;
+                        case "group":
+                            th.textContent = "Group";
+                            break;
+                        case "status":
+                            th.textContent = "Status";
+                            break;
+                        case "timestamp":
+                            th.textContent = "Timestamp";
+                            break;
+                        default:
+                            th.textContent = h;
+                            break;
+                    }
                     headerRow.appendChild(th);
                 });
                 thead.appendChild(headerRow);
@@ -53,13 +78,47 @@
             }
         }
 
-        document.getElementById("download-btn").addEventListener("click", () => {
-            window.location.href = `/api/workers/${workerId}/table/download`;
-        });
+        async function downloadTable() {
+            try {
+                const res = await fetch(`/api/workers/${workerId}/table/download`);
+                if (!res.ok) throw new Error("Failed to download table");
 
-        const pathParts = window.location.pathname.split("/");
-        const workerId = pathParts[2];
-        console.log(workerId);
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `worker${workerId}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function getPrivateTable() {
+            try {
+                const res = await fetch(`/api/workers/${workerId}/table/get-private`);
+                if (res.status === 404) {
+                    alert("No Private Data");
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `worker${workerId}-private.txt`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert(err.message);
+            }
+        }
 
         loadTable(workerId);
     </script>

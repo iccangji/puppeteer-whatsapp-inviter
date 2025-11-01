@@ -521,6 +521,50 @@ app.get("/api/workers/:id/table/download", async (req, res) => {
   res.download(tableFile);
 });
 
+app.get("/api/workers/:id/table/get-private", async (req, res) => {
+  const id = req.params.id;
+  const tableFile = path.join(inputsDir, `worker${id}.xlsx`);
+
+  if (!fs.existsSync(tableFile)) {
+    return res.status(404).send("File not found");
+  }
+
+  try {
+    const workbook = XLSX.readFile(tableFile);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const privateRows = rows.filter(r => String(r.status).toLowerCase() === "private");
+    if (privateRows.length === 0) {
+      return res.status(404).send("No rows with status 'Private'");
+    }
+
+    const lines = [];
+    lines.push("========================================");
+    privateRows.forEach((row, index) => {
+      lines.push(`Contact Name   : ${row.member || "-"}`);
+      lines.push(`Contact Phone  : ${row.phone || "-"}`);
+      lines.push(`Group          : ${row.group || "-"}`);
+      lines.push(`Status         : ${row.status || "-"}`);
+      lines.push(`Timestamp      : ${row.timestamp || "-"}`);
+      if (index < privateRows.length - 1) {
+        lines.push("----------------------------------------");
+      }
+    });
+
+    lines.push("========================================");
+    const txtContent = lines.join("\n");
+    const tempTxtPath = path.join(inputsDir, `worker${id}-private.txt`);
+    fs.writeFileSync(tempTxtPath, txtContent, "utf8");
+    res.download(tempTxtPath, `worker${id}-private.txt`, err => {
+      if (err) console.error("Download error:", err);
+      fs.unlink(tempTxtPath, () => { });
+    });
+  } catch (err) {
+    res.status(500).send("Error processing Excel file");
+  }
+});
+
 // View and edit config delay time
 app.get("/workers/:id/config", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "edit.html"));
