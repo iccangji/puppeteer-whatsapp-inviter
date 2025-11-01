@@ -66,11 +66,23 @@ export async function puppeteerBot(workerId, data) {
         // await new Promise(r => setTimeout(r, 3 * 60 * 1000));
 
         // Cek login
-        const qrCanvas = await page.$('canvas[aria-label="Scan this QR code to link a device!"]');
-        if (qrCanvas) {
-            logger.error("❌ WA Suspended / Logged Out. Worker OFF");
-            await browser.close();
-            return { success: false, message: "WA Suspend / Log Out" };
+        let retryCount = 0;
+        const maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 10 * 1000));
+            const qrCanvas = await page.$('canvas[aria-label="Scan this QR code to link a device!"]');
+            if (!qrCanvas) {
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    continue;
+                } else {
+                    logger.error("❌ WA Suspended / Logged Out. Worker OFF.");
+                    await browser.close();
+                    return { success: false, message: "WA Suspended / Logged Out" };
+                }
+            }
+
+            break;
         }
 
         // Cari grup

@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { launchWorker, closeWorker, getWorker, getAllWorkers, cleanAllWorkers } from "./puppeteer.js";
-import logger from "./utils/logger.js";
+import { createLogger } from "./utils/logger.js";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { Worker } from "worker_threads";
@@ -30,7 +30,7 @@ const baseLogDir = "/data/logs";
 
 const upload = multer({ dest: "/tmp" });
 const activeThreads = new Map();
-
+const logger = createLogger();
 // ensure folders
 fs.mkdirSync(profilesDir, { recursive: true });
 fs.mkdirSync(inputsDir, { recursive: true });
@@ -194,7 +194,7 @@ io.on("connection", (socket) => {
             const newConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
             socket.emit("workerConfig", { id, config: newConfig });
           } catch (err) {
-            console.error("⚠️ Error reading config:", err);
+            console.error(`⚠️ [${configPath}] Error reading config:`, err);
           }
         }
       });

@@ -7,7 +7,6 @@ import { updateConfig, getQueueSize } from "./utils/config.js";
 import XLSX from "xlsx";
 
 const id = workerData.id;
-const logger = createLogger(id);
 const inputsDir = "/data/inputs";
 const profilesDir = "/data/profiles";
 const configDir = "/data/config";
@@ -43,6 +42,7 @@ function writeTable(headers, rows) {
 }
 
 export function updateRow(current, message) {
+  const logger = createLogger(id);
   const { headers, rows } = readTable();
   const timestamp = new Date()
     .toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
@@ -59,6 +59,7 @@ export function updateRow(current, message) {
 }
 
 function getDelayMinutes() {
+  const logger = createLogger(id);
   const configPath = path.join(configDir, `worker${id}`, "config.json");
   if (!fs.existsSync(configPath)) {
     logger.info(`No delay config. Delay default: 120 minutes`);
@@ -76,6 +77,7 @@ function getNextPending() {
 }
 
 while (true) {
+  const logger = createLogger(id);
   try {
     const current = getNextPending();
     if (!current) {
@@ -97,6 +99,11 @@ while (true) {
           parentPort.postMessage({ id, done: true, message: result });
           break;
         }
+        if (message === "Sucess") {
+          const delayMinutes = getDelayMinutes();
+          logger.info(`⏳ Delay ${delayMinutes} minutes before next member`);
+          await new Promise(r => setTimeout(r, delayMinutes * 60 * 1000));
+        }
       } else {
         logger.error(message)
         parentPort.postMessage({ id, done: false, message });
@@ -108,12 +115,6 @@ while (true) {
       parentPort.postMessage({ id, done: false, message: err });
       break;
     }
-
-
-    const delayMinutes = getDelayMinutes();
-    logger.info(`⏳ Delay ${delayMinutes} minutes before next member`);
-    await new Promise(r => setTimeout(r, delayMinutes * 60 * 1000));
-
   } catch (err) {
     logger.error(err);
     parentPort.postMessage({ id, done: false, message: err });
