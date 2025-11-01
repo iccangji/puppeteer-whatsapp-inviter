@@ -3,12 +3,14 @@ import path from "path";
 import { parentPort, workerData } from "worker_threads";
 import { createLogger } from "./utils/logger.js";
 import { puppeteerBot } from "./puppeteer.js";
+import { updateConfig, getQueueSize } from "./utils/config.js";
 import XLSX from "xlsx";
 
 const id = workerData.id;
 const logger = createLogger(id);
 const inputsDir = "/data/inputs";
 const profilesDir = "/data/profiles";
+const configDir = "/data/config";
 const tablePath = path.join(inputsDir, `worker${id}.xlsx`);
 
 
@@ -57,8 +59,9 @@ export function updateRow(current, message) {
 }
 
 function getDelayMinutes() {
-  const configPath = path.join(profilesDir, `worker${id}`, "config.json");
+  const configPath = path.join(configDir, `worker${id}`, "config.json");
   if (!fs.existsSync(configPath)) {
+    logger.info(`No delay config. Delay default: 120 minutes`);
     return 120; // Default delay minutes
   }
   const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -76,8 +79,9 @@ while (true) {
   try {
     const current = getNextPending();
     if (!current) {
-      logger.info(`No pending contacts. Worker OFF`);
-      parentPort.postMessage({ id, done: true });
+      const result = `No pending contacts. Worker OFF`;
+      logger.info(result);
+      parentPort.postMessage({ id, done: true, message: result });
       break;
     }
     logger.info(`Processing ${current.member} (${current.phone})`);
@@ -85,20 +89,23 @@ while (true) {
       const { success, message } = await puppeteerBot(id, current);
       if (success) {
         updateRow({ member: current.member }, message);
+        updateConfig(id, { queue: getQueueSize(id) });
         const next = getNextPending();
         if (!next) {
-          logger.info(`No next contacts. Worker OFF`);
-          parentPort.postMessage({ id, done: true });
+          const result = `No next contacts. Worker OFF`;
+          logger.info(result);
+          parentPort.postMessage({ id, done: true, message: result });
           break;
         }
       } else {
         logger.error(message)
-        parentPort.postMessage({ id, done: false });
+        parentPort.postMessage({ id, done: false, message });
+        updateConfig(id, { qrLoggedIn: false });
         break;
       }
     } catch (err) {
       logger.error(err);
-      parentPort.postMessage({ id, done: false });
+      parentPort.postMessage({ id, done: false, message: err });
       break;
     }
 
@@ -109,7 +116,7 @@ while (true) {
 
   } catch (err) {
     logger.error(err);
-    parentPort.postMessage({ id, done: false });
+    parentPort.postMessage({ id, done: false, message: err });
     break;
   }
 }

@@ -3,4 +3,5 @@
 /data/inputs/*
 /data/logs/*
 /data/profiles/*
+/data/config/*
 /src/package-lock.json

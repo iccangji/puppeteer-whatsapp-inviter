@@ -59,6 +59,24 @@ input {
     height: 240px;
 }
 
+#logoutBtn {
+    float: right;
+    background: #f33;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#changePasswordBtn {
+    float: right;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
 .refresh,
 .save,
 #download-btn {

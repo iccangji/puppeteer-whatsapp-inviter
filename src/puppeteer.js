@@ -95,7 +95,7 @@ export async function puppeteerBot(workerId, data) {
         if (!groupInfoButton) {
             logger.error("❌ Tombol Group Info tidak ditemukan.");
             await browser.close();
-            return { success: false, message: `Group ${data.group} not found` };
+            return { success: false, message: `Group ${data.group} info button not found` };
         }
 
         await groupInfoButton.click();
@@ -118,7 +118,7 @@ export async function puppeteerBot(workerId, data) {
         } else {
             logger.error("❌ Add Member button not found");
             await browser.close();
-            return { success: false, message: "Add Member button not found" };
+            return { success: true, message: "Group Banned" };
         }
 
         // Tunggu dialog add member terbuka
@@ -131,7 +131,7 @@ export async function puppeteerBot(workerId, data) {
         if (!searchInput) {
             logger.error("❌ Input Search Name/Number tidak ditemukan.");
             await browser.close();
-            return { success: false, message: "Input Search Name/Number" };
+            return { success: false, message: "Input Search Name/Number not found" };
         }
 
         // Klik untuk fokus
@@ -191,7 +191,7 @@ export async function puppeteerBot(workerId, data) {
         if (!addMemberClicked) {
             logger.error("❌ Tombol 'Add member' di modal tidak ditemukan.");
             await browser.close();
-            return { success: true, message: "Group Banned" };
+            return { success: false, message: "Add member in modal not found" };
         }
 
         logger.info("✅ Berhasil klik tombol 'Add member' dalam modal konfirmasi");

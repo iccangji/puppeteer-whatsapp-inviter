@@ -9,10 +9,10 @@ import { dirname } from "path";
 import { Worker } from "worker_threads";
 import XLSX from "xlsx";
 import { Server } from "socket.io";
-import http from "http";
+import http, { get } from "http";
 import bcrypt from "bcrypt";
 import session from "express-session";
-
+import { getQueueSize, updateConfig } from "./utils/config.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -25,8 +25,10 @@ const io = new Server(httpServer);
 const PORT = process.env.PORT || 3000;
 const profilesDir = "/data/profiles";
 const inputsDir = "/data/inputs";
-const upload = multer({ dest: "/tmp" });
+const configDir = "/data/config";
+const baseLogDir = "/data/logs";
 
+const upload = multer({ dest: "/tmp" });
 const activeThreads = new Map();
 
 // ensure folders
@@ -61,8 +63,10 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-  const adminUsername = process.env.ADMIN_USERNAME;
-  const adminPassword = process.env.ADMIN_PASSWORD;
+  const userData = fs.readFileSync(path.join(configDir, "user.json"), "utf8");
+  const user = JSON.parse(userData);
+  const adminUsername = user.username;
+  const adminPassword = user.password_hash;
   const { username, password } = req.body;
   if (username !== adminUsername) return res.send("<script>alert('Invalid username');window.location='/login';</script>");
 
@@ -79,102 +83,162 @@ app.post("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/login"));
 });
 
+app.get("/change-password", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "change-password.html"));
+})
+
+app.post("/api/change-password", requireLogin, async (req, res) => {
+  const userPath = path.join(configDir, "user.json");
+  const { oldPassword, newPassword } = req.body;
+
+  if (!oldPassword || !newPassword)
+    return res.status(400).json({ error: "Both old and new password are required" });
+
+  const user = JSON.parse(fs.readFileSync(userPath, "utf8"));
+  const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!isMatch) return res.status(401).json({ error: "Old password is incorrect" });
+
+  const hashed = await bcrypt.hash(newPassword, 12);
+  user.password_hash = hashed;
+
+  fs.writeFileSync(userPath, JSON.stringify(user, null, 2));
+  res.json({ message: "Password updated successfully" });
+});
+
+
+const watchers = new Map();
+function filterStatusLines(lines) {
+  const keywords = ['stopped', 'error', 'cleaned', 'idle', 'done', 'starting', 'running'];
+  return lines.filter(line => keywords.some(k => line.toLowerCase().includes(k)));
+}
+
 io.on("connection", (socket) => {
-  const baseLogDir = "/data/logs";
-
-  // When the frontend wants to watch a worker’s log
+  // --- DASHBOARD: WORKER STATUS ---
   socket.on("watchWorker", (id) => {
-    const logFile = path.join(baseLogDir, `worker-main.log`);
-
-    // If no log file exists, notify the client
+    const logFile = path.join(baseLogDir, "worker-main.log");
     if (!fs.existsSync(logFile)) {
       socket.emit("workerStatus", { id, status: "no log file" });
       return;
     }
 
-    // Send initial status from the last line containing "Worker {id}"
     const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
     const matchLines = lines.filter((l) => l.includes(`Worker ${id}`));
-    if (matchLines.length > 0) {
-      const last = matchLines[matchLines.length - 1];
-      const parts = last.split(`Worker ${id}`);
-      const status = parts[1]?.trim() || "idle";
-      socket.emit("workerStatus", { id, status });
-    } else {
-      socket.emit("workerStatus", { id, status: "idle" });
-    }
+    const last = matchLines.at(-1);
+    const status = last ? last.split(`Worker ${id}`)[1]?.trim() || "idle" : "idle";
+    socket.emit("workerStatus", { id, status });
 
-    fs.watchFile(logFile, { interval: 1000 }, () => {
-      try {
-        const content = fs.readFileSync(logFile, "utf8").trim().split("\n");
-        const matchLines = content.filter((l) => l.includes(`Worker ${id}`));
-        if (matchLines.length > 0) {
-          const last = matchLines[matchLines.length - 1];
-          const parts = last.split(`Worker ${id}`);
-          const status = parts[1]?.trim() || "idle";
-          socket.emit("workerStatus", { id, status });
-        } else {
-          socket.emit("workerStatus", { id, status: "idle" });
+    const key = `workerStatus-${id}-${socket.id}`;
+    if (!watchers.has(key)) {
+      const watcher = fs.watch(logFile, (eventType) => {
+        if (eventType === "change") {
+          try {
+            const content = fs.readFileSync(logFile, "utf8").trim().split("\n");
+            const matchLines = content.filter((l) => l.includes(`Worker ${id}`));
+            const last = matchLines.at(-1);
+            const status = last ? last.split(`Worker ${id}`)[1]?.trim() || "idle" : "idle";
+            socket.emit("workerStatus", { id, status });
+          } catch (err) {
+            console.error("⚠️ Error reading worker-main.log:", err);
+          }
         }
-      } catch (err) {
-        logger.error("⚠️ Error reading log:", err);
-      }
-    });
+      });
+      watchers.set(key, watcher);
+    }
   });
 
-  // When the frontend wants to watch a worker’s log
+  // --- DASHBOARD: MAIN LOGS (DISARING) ---
   socket.on("watchLogs", () => {
-    const logFile = path.join(baseLogDir, `worker-main.log`);
-
-    // If no log file exists, notify the client
+    const logFile = path.join(baseLogDir, "worker-main.log");
     if (!fs.existsSync(logFile)) {
-      socket.emit("mainLogs", { logs: "no log file" });
+      socket.emit("mainLogs", { logs: ["no log file"] });
       return;
     }
 
-    // Send initial status from the last line containing "Worker {id}"    
     const content = fs.readFileSync(logFile, "utf8");
-    const logs = content.split("\n").filter(Boolean).slice(-100);
+    const logs = filterStatusLines(content.split("\n").filter(Boolean)).slice(-300);
     socket.emit("mainLogs", { logs });
 
-    fs.watchFile(logFile, { interval: 1000 }, () => {
-      try {
-        const content = fs.readFileSync(logFile, "utf8");
-        const logs = content.split("\n").filter(Boolean).slice(-100);
-        socket.emit("mainLogs", { logs });
-      } catch (err) {
-        logger.error("⚠️ Error reading log:", err);
-      }
-    });
+    const key = `mainLogs-${socket.id}`;
+    if (!watchers.has(key)) {
+      const watcher = fs.watch(logFile, (eventType) => {
+        if (eventType === "change") {
+          try {
+            const content = fs.readFileSync(logFile, "utf8");
+            const logs = filterStatusLines(content.split("\n").filter(Boolean)).slice(-300);
+            socket.emit("mainLogs", { logs });
+          } catch (err) {
+            console.error("⚠️ Error reading main log:", err);
+          }
+        }
+      });
+      watchers.set(key, watcher);
+    }
   });
 
-  // When the frontend wants to watch a worker’s log
-  socket.on("watchWorkerLogs", (id) => {
-    const logFile = path.join(baseLogDir, `worker${id}.log`);
-
-    // If no log file exists, notify the client
-    if (!fs.existsSync(logFile)) {
-      socket.emit("workerLogs", { logs: "no log file" });
+  // --- DASHBOARD: CONFIG WORKER ---
+  socket.on("watchWorkerConfig", (id) => {
+    const configPath = path.join(configDir, `worker${id}`, "config.json");
+    if (!fs.existsSync(configPath)) {
+      socket.emit("workerConfig", { id, status: "no config file" });
       return;
     }
 
-    // Send initial status from the last line containing "Worker {id}"    
-    const content = fs.readFileSync(logFile, "utf8");
-    const logs = content.split("\n").filter(Boolean);
-    socket.emit("workerLogs", { logs });
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    socket.emit("workerConfig", { id, config });
 
-    fs.watchFile(logFile, { interval: 1000 }, () => {
-      try {
-        const content = fs.readFileSync(logFile, "utf8");
-        const logs = content.split("\n").filter(Boolean);
-        socket.emit("workerLogs", { logs });
-      } catch (err) {
-        logger.error("⚠️ Error reading log:", err);
-      }
-    });
+    const key = `config-${id}-${socket.id}`;
+    if (!watchers.has(key)) {
+      const watcher = fs.watch(configPath, (eventType) => {
+        if (eventType === "change") {
+          try {
+            const newConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+            socket.emit("workerConfig", { id, config: newConfig });
+          } catch (err) {
+            console.error("⚠️ Error reading config:", err);
+          }
+        }
+      });
+      watchers.set(key, watcher);
+    }
   });
 
-  socket.on("disconnect", () => { });
+  // --- DETAIL PAGE: LOGS PER WORKER ---
+  socket.on("watchWorkerLogs", (id) => {
+    const logFile = path.join(baseLogDir, `worker${id}.log`);
+    if (!fs.existsSync(logFile)) {
+      socket.emit("workerLogs", { logs: ["no log file"] });
+      return;
+    }
+
+    const content = fs.readFileSync(logFile, "utf8").split("\n").filter(Boolean);
+    socket.emit("workerLogs", { logs: content.slice(-300) });
+
+    const key = `workerLogs-${id}-${socket.id}`;
+    if (!watchers.has(key)) {
+      const watcher = fs.watch(logFile, (eventType) => {
+        if (eventType === "change") {
+          try {
+            const content = fs.readFileSync(logFile, "utf8").split("\n").filter(Boolean);
+            socket.emit("workerLogs", { logs: content.slice(-300) });
+          } catch (err) {
+            console.error(`⚠️ Error reading worker${id}.log:`, err);
+          }
+        }
+      });
+      watchers.set(key, watcher);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (const [key, watcher] of watchers) {
+      if (key.endsWith(socket.id)) {
+        try {
+          watcher.close?.();
+        } catch { }
+        watchers.delete(key);
+      }
+    }
+  });
 });
 
 // list profiles (folders) and running workers (HTTP requests)
@@ -230,11 +294,24 @@ app.post("/api/workers", (req, res) => {
 
   const dir = path.join(profilesDir, `worker${nextId}`);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const logFile = path.join(baseLogDir, `worker${nextId}.log`);
+  if (!fs.existsSync(logFile)) fs.writeFileSync(logFile, "");
+
+  const configPath = path.join(configDir, `worker${nextId}`);
+  if (!fs.existsSync(configPath)) fs.mkdirSync(configPath, { recursive: true });
+
   const config = {
-    delayRandomStart: 0,
-    delayRandomEnd: 0
+    delayRandomStart: 240,
+    delayRandomEnd: 300,
+    note: "",
+    isTableExist: false,
+    qrLoggedIn: false,
+    queue: 0
   };
-  fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify(config, null, 2));
+
+  fs.writeFileSync(path.join(configPath, "config.json"), JSON.stringify(config, null, 2));
+  logger.info(`☑ Worker ${nextId} idle`);
   res.json({ success: true, id: nextId });
 });
 
@@ -247,8 +324,13 @@ app.delete("/api/workers/:id", async (req, res) => {
     if (running.includes(id)) return res.status(400).json({ success: false, message: "Worker is running. Stop it first." });
     const dir = path.join(profilesDir, `worker${id}`);
     const tableFile = path.join(inputsDir, `worker${id}.xlsx`);
+    const logFile = path.join(baseLogDir, `worker${id}.log`);
+    const configPath = path.join(configDir, `worker${id}`);
     if (fs.existsSync(tableFile)) fs.unlinkSync(tableFile);
+    if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    if (fs.existsSync(configPath)) fs.rmSync(configPath, { recursive: true, force: true });
+    logger.info(`✅ Worker ${id} idle`);
     return res.json({ success: true });
   } catch (e) {
     logger.error(e);
@@ -273,7 +355,9 @@ app.post("/api/workers/:id/clear", async (req, res) => {
     //     fs.rmSync(filePath, { recursive: true, force: true });
     //   }
     // }
-    if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+    if (fs.existsSync(logFile)) fs.writeFileSync(logFile, "");
+    updateConfig(id, { isTableExist: false, queue: 0 });
+    logger.info(`✅ Worker ${id} idle`);
     return res.json({ success: true });
   } catch (e) {
     logger.error(e);
@@ -290,6 +374,8 @@ app.post("/api/workers/:id/upload", upload.single("xlsx"), (req, res) => {
     const dest = path.join(inputsDir, `worker${id}.xlsx`);
     fs.copyFileSync(file.path, dest);
     fs.unlinkSync(file.path);
+
+    updateConfig(id, { isTableExist: true, queue: getQueueSize(id) });
     res.json({ success: true });
   } catch (e) {
     logger.error(e);
@@ -390,7 +476,7 @@ app.get("/api/workers/:id/logs", (req, res) => {
     if (!fs.existsSync(logFile)) return res.json({ logs: [] });
     const content = fs.readFileSync(logFile, "utf8");
     const allLines = content.split("\n").filter(Boolean);
-    const logs = (id === "-main") ? allLines.slice(-100) : allLines;
+    const logs = (id === "-main") ? allLines.slice(-300) : allLines;
 
     res.json({ logs });
   } catch (e) {
@@ -437,12 +523,12 @@ app.get("/api/workers/:id/table/download", async (req, res) => {
 
 // View and edit config delay time
 app.get("/workers/:id/config", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "config.html"));
+  res.sendFile(path.join(__dirname, "public", "edit.html"));
 })
 
 app.get("/api/workers/:id/config", (req, res) => {
   const id = req.params.id;
-  const configPath = path.join(profilesDir, `worker${id}`, "config.json");
+  const configPath = path.join(configDir, `worker${id}`, "config.json");
 
   if (!fs.existsSync(configPath)) {
     return res.status(404).json({ success: false, message: "Config not found" });
@@ -455,31 +541,13 @@ app.get("/api/workers/:id/config", (req, res) => {
 // update config for a worker
 app.post("/api/workers/:id/config", (req, res) => {
   const id = req.params.id;
-  const configPath = path.join(profilesDir, `worker${id}`, "config.json");
+  const configPath = path.join(configDir, `worker${id}`, "config.json");
 
   if (!fs.existsSync(configPath)) {
     return res.status(404).json({ success: false, message: "Config not found" });
   }
-
-  const { delayRandomStart, delayRandomEnd } = req.body;
-  if (!delayRandomStart || !delayRandomEnd) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Missing delayRandomStart or delayRandomEnd" });
-  }
-
-  const newConfig = {
-    delayRandomStart,
-    delayRandomEnd
-  };
-
-  fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-
-  res.json({
-    success: true,
-    id,
-    config: newConfig,
-  });
+  const newConfig = updateConfig(id, req.body);
+  res.json({ success: true, id, newConfig });
 });
 
 // close all workers
@@ -504,5 +572,5 @@ app.post("/api/workers/close-all", async (req, res) => {
 });
 
 httpServer.listen(PORT, async () => {
-  logger.info(`Dashboard: http://localhost:${PORT}`);
+  logger.info(`Service starting at http://localhost:${PORT}`);
 });

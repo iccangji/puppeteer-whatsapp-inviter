@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <title>Edit Worker Delay</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style/style.css">
 </head>
 
 <body>
@@ -17,6 +17,8 @@
         <input type="number" id="start" required />
         <label>Delay Random End</label>
         <input type="number" id="end" required />
+        <label>Note</label>
+        <input type="text" id="note" required />
         <button class="save" onclick="saveConfig()">Save Config</button>
     </div>
 
@@ -34,14 +36,21 @@
             document.getElementById("workerId").textContent = `Worker: worker${id}`;
             document.getElementById("start").value = data.config.delayRandomStart;
             document.getElementById("end").value = data.config.delayRandomEnd;
+            document.getElementById("note").value = data.config.note;
         }
 
         async function saveConfig() {
             const delayRandomStart = parseInt(document.getElementById("start").value);
             const delayRandomEnd = parseInt(document.getElementById("end").value);
+            const note = document.getElementById("note").value;
 
             if (isNaN(delayRandomStart) || isNaN(delayRandomEnd)) {
                 alert("Please enter valid numbers.");
+                return;
+            }
+
+            if (note.trim() === "") {
+                alert("Please enter a note.");
                 return;
             }
 
@@ -53,12 +62,13 @@
             const res = await fetch(`/api/workers/${id}/config`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ delayRandomStart, delayRandomEnd }),
+                body: JSON.stringify({ delayRandomStart, delayRandomEnd, note }),
             });
 
             const data = await res.json();
             if (data.success) {
                 alert("Config updated successfully!");
+                location.href = `/`;
             } else {
                 alert("Failed to update: " + data.message);
             }

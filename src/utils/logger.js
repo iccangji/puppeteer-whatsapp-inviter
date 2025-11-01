@@ -3,43 +3,59 @@ import fs from "fs";
 import path from "path";
 
 const baseLogDir = "/data/logs";
-
-// pastikan folder log ada
 if (!fs.existsSync(baseLogDir)) fs.mkdirSync(baseLogDir, { recursive: true });
 
-/**
- * Membuat logger per worker
- * @param {string|number} workerId - ID Worker (contoh: 1, 2, "server")
- * @returns {winston.Logger}
- */
-export function createLogger(workerId = "-main") {
-    const filename = path.join(baseLogDir, `worker${workerId}.log`);
+const LOG_PATH = path.join(baseLogDir, "worker-main.log");
+const MAX_AGE_DAYS = 7;
 
-    const logger = winston.createLogger({
+function pruneOldLogs() {
+    if (!fs.existsSync(LOG_PATH)) return;
+    const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+    try {
+        const lines = fs.readFileSync(LOG_PATH, "utf8").split("\n");
+        const filtered = lines.filter(line => {
+            const match = line.match(/\[(\d{1,2})\/(\d{1,2})\/(\d{4}), (\d{2})\.(\d{2})\.(\d{2})\]/);
+            if (!match) return true;
+            const [_, d, m, y, h, min, s] = match;
+            const ts = new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${h}:${min}:${s}+07:00`);
+            return ts.getTime() >= cutoff;
+        });
+
+        fs.writeFileSync(LOG_PATH, filtered.join("\n"));
+    } catch (err) {
+        console.error("[logger] Failed clear old logs:", err);
+    }
+}
+
+export function createLogger(workerId = "-main") {
+    const baseName = `worker${workerId}`;
+    const logPath = path.join(baseLogDir, `${baseName}.log`);
+    if (workerId == "-main") pruneOldLogs()
+    return winston.createLogger({
         level: "info",
         format: winston.format.combine(
-            winston.format.timestamp({ format: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) }),
+            winston.format.timestamp({
+                format: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
+            }),
             winston.format.printf(({ level, message, timestamp }) => {
-                return `[${timestamp}] [worker${workerId}] ${level.toUpperCase()}: ${message}`;
+                return `[${timestamp}] [${baseName}] ${level.toUpperCase()}: ${message}`;
             })
         ),
         transports: [
-            new winston.transports.File({ filename }),
+            new winston.transports.File({ filename: logPath }),
             new winston.transports.Console({
                 format: winston.format.combine(
                     winston.format.colorize(),
                     winston.format.printf(({ level, message, timestamp }) => {
-                        return `[${timestamp}] [worker${workerId}] ${level}: ${message}`;
+                        return `[${timestamp}] [${baseName}] ${level}: ${message}`;
                     })
                 ),
             }),
         ],
     });
-
-    return logger;
 }
-
-// Default logger (untuk server utama)
+// Default logger
 const logger = createLogger("-main");
 
 export default logger;

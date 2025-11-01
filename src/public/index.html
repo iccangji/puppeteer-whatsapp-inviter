@@ -5,14 +5,16 @@
   <meta charset="utf-8">
   <script src="/socket.io/socket.io.js"></script>
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style/style.css">
 </head>
 
 <body>
   <h1>Dashboard</h1>
-  <button id="logoutBtn" onclick="logout()"
-    style="float:right;background:#f33;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;">
+  <button id="logoutBtn" onclick="logout()">
     Logout
+  </button>
+  <button id="changePasswordBtn" onclick="changePassword()">
+    Change Password
   </button>
   <div>
     <button onclick="createWorker()">➕ Create Worker</button>
@@ -25,13 +27,16 @@
   <h2>QR</h2>
   <div id="qr">No QR</div>
 
-  <h2>Logs</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h2>Logs</h2>
+  </div>
   <div id="logs"></div>
 
 
 
   <script>
     const socket = io();
+
     async function load() {
       const res = await fetch('/api/workers');
       const data = await res.json();
@@ -39,28 +44,33 @@
       const workersDiv = document.getElementById('workers');
       workersDiv.innerHTML = '';
       data.profiles.forEach(p => {
-        console.log(p);
-
         const id = p.id;
         const running = data.running.includes(id);
         const div = document.createElement('div');
         div.className = 'worker';
         div.innerHTML = `<div style="margin-bottom: 10px"><b>${p.name}</b>
-        <span id="status-${id}" style="font-weight:bold;margin-bottom:8px;"></span></div>
+        <span id="status-${id}" style="font-weight:bold;margin-bottom:16px;"></span>
+        <div style="margin-bottom: 10px">
+        <span id="qrLoggedIn-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
+        <span id="delay-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
+        <span id="queue-${id}" style="font-weight:bold;margin-bottom:8px;"></span>
+        <span id="note-${id}" style="font-weight:bold;margin-bottom:8px;"></span></div>
+        </div>
       <div>
         <button id="btn-start-${id}" onclick="start(${id})">▶ Start</button>
         <button id="btn-stop-${id}" onclick="stop(${id})">⏹ Stop</button>
-        <button onclick="config(${id})">⌛ Delay Time</button>
-        <button onclick="logs(${id})">📝 Logs</button>
-        <button onclick="upload(${id})" ${p.isTableExist ? 'disabled' : ''}>📤 Upload Table</button>
-        <button onclick="table(${id})">💻 Report</button>
-        <button onclick="clear(${id})">🧹 Clear</button>
-        <button onclick="del(${id})">🗑 Delete</button>
+        <button id="btn-config-${id}" onclick="edit(${id})">⚙ Edit</button>
+        <button onclick="logs(${id})">📝 Logs</config>
+        <button id="btn-upload-${id}" onclick="upload(${id})" ${p.isTableExist ? 'disabled' : ''}>📤 Upload Table</button>
+        <button id="btn-report-${id}" onclick="table(${id})">💻 Report</button>
+        <button id="btn-clear-${id}" onclick="clearWorker(${id})">🧹 Clear</button>
+        <button id="btn-delete-${id}" onclick="del(${id})">🗑 Delete</button>
       </div>
     `;
         workersDiv.appendChild(div);
         socket.emit("watchWorker", id);
         socket.emit("watchLogs");
+        socket.emit("watchWorkerConfig", id);
       });
     }
 
@@ -70,8 +80,31 @@
         if (el) el.textContent = `(${status})`;
         const startBtn = document.getElementById(`btn-start-${id}`);
         const stopBtn = document.getElementById(`btn-stop-${id}`);
-        stopBtn.disabled = (status === 'stopped' || status === 'error' || status === 'done' || status === 'cleaned') || status === 'idle';
-        startBtn.disabled = (status === 'starting' || status === 'running');
+        const configBtn = document.getElementById(`btn-config-${id}`);
+        const uploadBtn = document.getElementById(`btn-upload-${id}`);
+        const clearBtn = document.getElementById(`btn-clear-${id}`);
+        const deleteBtn = document.getElementById(`btn-delete-${id}`);
+        if (status === 'stopped' || status === 'error' || status === 'cleaned' || status === 'idle') {
+          startBtn.disabled = false || !uploadBtn.disabled;
+          stopBtn.disabled = true;
+          configBtn.disabled = false;
+          clearBtn.disabled = false;
+          deleteBtn.disabled = false;
+        }
+        if (status === "done") {
+          startBtn.disabled = true;
+          stopBtn.disabled = true;
+          configBtn.disabled = false;
+          clearBtn.disabled = false;
+          deleteBtn.disabled = false;
+        }
+        if (status === 'starting' || status === 'running') {
+          stopBtn.disabled = false;
+          startBtn.disabled = true;
+          configBtn.disabled = true;
+          clearBtn.disabled = true;
+          deleteBtn.disabled = true;
+        }
       }
     });
 
@@ -84,6 +117,22 @@
       }
     });
 
+    socket.on("workerConfig", ({ id, config }) => {
+      if (id && config) {
+        const uploadBtn = document.getElementById(`btn-upload-${id}`);
+        const reportBtn = document.getElementById(`btn-report-${id}`);
+        const qrLoggedInEl = document.getElementById(`qrLoggedIn-${id}`);
+        const delayEl = document.getElementById(`delay-${id}`);
+        const queueEl = document.getElementById(`queue-${id}`);
+        const noteEl = document.getElementById(`note-${id}`);
+        uploadBtn.disabled = config.isTableExist;
+        reportBtn.disabled = !config.isTableExist;
+        qrLoggedInEl.textContent = config.qrLoggedIn ? `(QR Logged In)` : '(QR Logged Out)';
+        delayEl.textContent = `(Delay: ${config.delayRandomStart}- ${config.delayRandomEnd} Minutes)`;
+        queueEl.textContent = `(Queue: ${config.queue} Contacts)`;
+        noteEl.textContent = config.note ? `(Note: ${config.note})` : '(Note: -)';
+      }
+    });
 
 
     async function createWorker() {
@@ -100,14 +149,22 @@
 
     async function start(id) {
       alert(`Starting worker ${id}, please wait...`);
-      document.getElementById("qr").innerHTML = `<p>Launching browser, Plese wait...</p>`
-      const res = await fetch(`/api/workers/${id}/start`, { method: 'POST' });
-      const data = await res.json();
-      if (data.qr) {
-        document.getElementById('qr').innerHTML = `<h4>Scan QR for worker ${id}</h4><img style="width:100%" src="${data.qr}"/>`;
-        pollQr(id);
+      const config = await fetch(`/api/workers/${id}/config`);
+      const configData = await config.json();
+      if (configData.config.qrLoggedIn) {
+        document.getElementById('qr').innerHTML = `<p>Worker ${id} running...</p>`;
+        // start automation by calling back-end run (it will run in background)
+        await fetch(`/api/workers/${id}/run`, { method: 'POST' });
       } else {
-        document.getElementById('qr').innerHTML = `<p>${data.message || 'Started'}</p>`;
+        document.getElementById("qr").innerHTML = `<p>Launching browser, Plese wait...</p>`
+        const res = await fetch(`/api/workers/${id}/start`, { method: 'POST' });
+        const data = await res.json();
+        if (data.qr) {
+          document.getElementById('qr').innerHTML = `<h4>Scan QR for worker ${id}</h4><img style="width:100%" src="${data.qr}"/>`;
+          pollQr(id);
+        } else {
+          document.getElementById('qr').innerHTML = `<p>${data.message || 'Started'}</p>`;
+        }
       }
     }
 
@@ -125,6 +182,13 @@
           setTimeout(() => pollQr(id, retryCount + 1), 5000);
         } else {
           document.getElementById('qr').innerHTML = `<p>✅ Worker ${id} logged in. Starting automation...</p>`;
+          // Update config
+          await fetch(`/api/workers/${id}/config`, {
+            method: 'POST',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ qrLoggedIn: true }),
+          });
+
           // start automation by calling back-end run (it will run in background)
           await fetch(`/api/workers/${id}/run`, { method: 'POST' });
         }
@@ -153,7 +217,7 @@
     }
 
     async function del(id) {
-      const stopped = await fetch(`/api/workers/${id}/stop`, { method: 'POST' });;
+      const stopped = await fetch(`/api/workers/${id}/stop`, { method: 'POST' });
       if (stopped) {
         if (!confirm('Delete worker ' + id + '?')) return;
         const res = await fetch(`/api/workers/${id}`, { method: 'DELETE' });
@@ -164,26 +228,26 @@
     }
 
     function table($id) {
-      window.location.href = `/workers/${$id}/table`;
+      window.open(`/workers/${$id}/table`, '_blank');
     }
 
     function logs($id) {
-      window.location.href = `/workers/${$id}/logs`;
+      window.open(`/workers/${$id}/logs`, '_blank');
     }
 
-    function config($id) {
-      window.location.href = `/workers/${$id}/config`;
+    function edit($id) {
+      window.open(`/workers/${$id}/config`, '_blank');
     }
 
-    async function clear(id) {
-      const stopped = await stop(id);
+    async function clearWorker(id) {
+      const stopped = await fetch(`/api/workers/${id}/stop`, { method: 'POST' });
       if (stopped) {
-        if (!confirm('Clear ' + id + '?')) return;
+        if (!confirm('Clear worker ' + id + '?')) return;
         const res = await fetch(`/api/workers/${id}/clear`, { method: 'POST' });
         const j = await res.json();
         alert(j.success ? 'Cleared' : ('Failed: ' + j.message));
         location.reload();
-      }
+      };
     }
 
     async function logout() {
@@ -194,6 +258,10 @@
       } else {
         alert('Logout failed.');
       }
+    }
+
+    function changePassword() {
+      window.open('/change-password', '_blank')
     }
 
     load();
