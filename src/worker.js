@@ -44,9 +44,15 @@ function writeTable(headers, rows) {
 export function updateRow(current, message) {
   const logger = createLogger(id);
   const { headers, rows } = readTable();
-  const timestamp = new Date()
-    .toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
-    .replace(",", "");
+  const now = new Date();
+  const timeNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+  const day = String(timeNow.getDate()).padStart(2, "0");
+  const month = String(timeNow.getMonth() + 1).padStart(2, "0");
+  const year = timeNow.getFullYear();
+  const hour = String(timeNow.getHours()).padStart(2, "0");
+  const minute = String(timeNow.getMinutes()).padStart(2, "0");
+  const second = String(timeNow.getSeconds()).padStart(2, "0");
+  const timestamp = `${day}:${month}:${year} ${hour}:${minute}:${second}`;
 
   const idx = rows.findIndex(r => r.member === current.member);
   if (idx !== -1) {

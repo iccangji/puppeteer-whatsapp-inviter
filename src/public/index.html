@@ -185,7 +185,7 @@
           document.getElementById("qr").innerHTML = `
           <p>Checking QR...</p>
         `;
-          setTimeout(() => pollQr(id, retryCount + 1), 5000);
+          setTimeout(() => pollQr(id, retryCount + 1), 15000);
         } else {
           document.getElementById('qr').innerHTML = `<p>✅ Worker ${id} logged in. Starting automation...</p>`;
           // Update config

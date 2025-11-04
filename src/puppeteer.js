@@ -37,6 +37,7 @@ async function launchBrowser(profile) {
             "--window-size=1366,768",
             "--start-maximized",
         ],
+        protocolTimeout: 300 * 1000
     });
     return browser
 }
@@ -49,13 +50,14 @@ export async function puppeteerBot(workerId, data) {
     logger.info(`ℹ️ Use Profile: ${profile}`)
     if (!profile) {
         logger.info(profile);
-
         logger.error("❌ Profile not found. Worker OFF");
         return { success: false, message: "Profile not found" };
     }
 
     const browser = await launchBrowser(profile);
     const page = await browser.newPage();
+    page.setDefaultTimeout(300000);
+    page.setDefaultNavigationTimeout(300000);
     try {
         // WhatsApp Web
         logger.info("ℹ️ Membuka web WhatsApp...");
@@ -67,7 +69,7 @@ export async function puppeteerBot(workerId, data) {
 
         // Cek login
         let retryCount = 0;
-        const maxRetries = 3;
+        let maxRetries = 3;
         while (retryCount < maxRetries) {
             await new Promise(r => setTimeout(r, 5 * 1000));
             const qrCanvas = await page.$('canvas[aria-label="Scan this QR code to link a device!"]');
@@ -84,163 +86,254 @@ export async function puppeteerBot(workerId, data) {
         const groupSelector = `span[title="${data.group}"]`;
         const groupElement = await page.$(groupSelector);
 
-        if (!groupElement) {
-	    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
-            logger.error(`❌ Group ${data.group} not found`);
-            await browser.close();
-            return { success: true, message: `Group not found` };
-        }
-
-        // Klik grup
-        await groupElement.click();
-        logger.info(`✅ Berhasil klik grup "${data.group}"`);
-        await new Promise(r => setTimeout(r, 3 * 1000));
-
-        // Klik tombol Group Info
-        const groupInfoSelector = 'div[title="Profile details"][role="button"]';
-        const groupInfoButton = await page.$(groupInfoSelector);
-
-        if (!groupInfoButton) {
-            logger.error("❌ Tombol Group Info tidak ditemukan.");
-            await browser.close();
-            return { success: false, message: `Group ${data.group} info button not found` };
-        }
-
-        await groupInfoButton.click();
-        logger.info("✅ Berhasil klik Group Info");
-
-        // Klik tombol Add Member
-        const addMemberClick = await page.evaluate(() => {
-            const xpath = "//div[text()='Add member']";
-            const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-            const el = result.singleNodeValue;
-            if (el) {
-                el.click();
-                return true;
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            if (!groupElement) {
+                if (retryCount == maxRetries - 1) {
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    logger.error(`❌ Group ${data.group} not found`);
+                    await browser.close();
+                    return { success: true, message: `Group not found` };
+                } else {
+                    retryCount++;
+                }
             } else {
-                return false;
+                await groupElement.click();
+                logger.info(`✅ Berhasil klik grup "${data.group}"`);
+                break;
             }
-        });
-        if (addMemberClick) {
-            logger.info("✅ Berhasil klik Add Member");
-        } else {
-            logger.error("❌ Add Member button not found");
-            await browser.close();
-            return { success: true, message: "Group Banned" };
         }
+
+        await new Promise(r => setTimeout(r, 10 * 1000));
+
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Klik tombol Group Info
+            const groupInfoSelector = 'div[title="Profile details"][role="button"]';
+            const groupInfoButton = await page.$(groupInfoSelector);
+            if (!groupInfoButton) {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Tombol Group Info tidak ditemukan.");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: false, message: `Group ${data.group} info button not found` };
+                } else {
+                    retryCount++;
+                }
+            }
+            else {
+                await groupInfoButton.click();
+                logger.info("✅ Berhasil klik Group Info");
+                break;
+            }
+        }
+
+
+        await new Promise(r => setTimeout(r, 10 * 1000));
+
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Klik tombol Add Member
+            const addMemberClick = await page.evaluate(() => {
+                const xpath = "//div[text()='Add member']";
+                const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                const el = result.singleNodeValue;
+                if (el) {
+                    el.click();
+                    return true;
+                } else {
+                    return false;
+                }
+            });
+            if (addMemberClick) {
+                logger.info("✅ Berhasil klik Add Member");
+                break;
+            } else {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Add Member button not found");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: true, message: "Group Banned" };
+                } else {
+                    retryCount++;
+                }
+            }
+        }
+
 
         // Tunggu dialog add member terbuka
-        await new Promise(r => setTimeout(r, 3 * 1000));
+        await new Promise(r => setTimeout(r, 10 * 1000));
 
-        // Pilih input "Search name or number"
-        const searchInputSelector = 'div[aria-label="Search name or number"][contenteditable="true"]';
-        const searchInput = await page.$(searchInputSelector);
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Pilih input "Search name or number"
+            const searchInputSelector = 'div[aria-label="Search name or number"][contenteditable="true"]';
+            const searchInput = await page.$(searchInputSelector);
 
-        if (!searchInput) {
-            logger.error("❌ Input Search Name/Number tidak ditemukan.");
-            await browser.close();
-            return { success: false, message: "Input Search Name/Number not found" };
+            if (!searchInput) {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Input Search Name/Number tidak ditemukan.");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: false, message: "Input Search Name/Number not found" };
+                } else {
+                    retryCount++;
+                }
+            } else {
+                // Klik untuk fokus
+                await searchInput.click({ clickCount: 2 });
+
+                // Ketik nama kontak
+                const contactName = data.member;
+                await page.type(searchInputSelector, contactName, { delay: 100 });
+
+                logger.info(`✅ Mengetik nama kontak: ${contactName}`);
+            }
         }
-
-        // Klik untuk fokus
-        await searchInput.click({ clickCount: 2 });
-
-        // Ketik nama kontak
-        const contactName = data.member;
-        await page.type(searchInputSelector, contactName, { delay: 100 });
-
-        logger.info(`✅ Mengetik nama kontak: ${contactName}`);
 
         // Tunggu nomor handphone ditemukan
-        await new Promise(r => setTimeout(r, 5 * 1000));
+        await new Promise(r => setTimeout(r, 10 * 1000));
 
-        // Klik checkbox pada hasil pencarian kontak
-        const checkboxes = await page.$$('div[role="checkbox"][aria-checked="false"]');
-
-        if (checkboxes.length === 0) {
-            logger.error("❌ Tidak ada kontak ditemukan.");
-            await browser.close();
-            return { success: true, message: 'Contact Not Found' };
-        }
-
-        // Klik elemen
-        await checkboxes[0].click();
-        logger.info("✅ Berhasil klik checkbox kontak");
-        await new Promise(r => setTimeout(r, 3 * 1000));
-
-
-        // Klik tombol Confirm (ikon centang)
-        const confirmButtonSelector = 'span[aria-label="Confirm"]';
-        const confirmButton = await page.$(confirmButtonSelector);
-
-        if (!confirmButton) {
-            logger.error("❌ Tombol Confirm tidak ditemukan.");
-            await browser.close();
-            return { success: false, message: "Confirm button not found" };
-        }
-
-        await confirmButton.click();
-        logger.info("✅ Berhasil klik tombol Confirm");
-
-        // Klik tombol "Add member" dalam modal konfirmasi
-        await page.waitForSelector('body');
-
-        const addMemberClicked = await page.evaluate(() => {
-            const xpath = "//span[text()='Add member']";
-            const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-            const el = result.singleNodeValue;
-            if (el) {
-                el.click();
-                return true;
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Klik checkbox pada hasil pencarian kontak
+            const checkboxes = await page.$$('div[role="checkbox"][aria-checked="false"]');
+            if (checkboxes.length === 0) {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Tidak ada kontak ditemukan.");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: true, message: 'Contact Not Found' };
+                } else {
+                    retryCount++;
+                }
+            } else {
+                // Klik elemen
+                await checkboxes[0].click();
+                logger.info("✅ Berhasil klik checkbox kontak");
+                await new Promise(r => setTimeout(r, 3 * 1000));
             }
-            return false;
-        });
-
-        if (!addMemberClicked) {
-            logger.error("❌ Tombol 'Add member' di modal tidak ditemukan.");
-            await browser.close();
-            return { success: false, message: "Add member in modal not found" };
         }
 
-        logger.info("✅ Berhasil klik tombol 'Add member' dalam modal konfirmasi");
+        await new Promise(r => setTimeout(r, 10 * 1000));
 
-        // Tunggu kemungkinan munculnya pesan error "Couldn't add"
-        const privatedMessageFound = await page.waitForFunction(
-            () => !!document.evaluate("//div[contains(text(), \"Couldn't add\")]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue,
-            { timeout: 5000 }
-        ).catch(() => null);
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Klik tombol Confirm (ikon centang)
+            const confirmButtonSelector = 'span[aria-label="Confirm"]';
+            const confirmButton = await page.$(confirmButtonSelector);
 
-        if (privatedMessageFound) {
-            const errorText = await page.evaluate(() => {
-                const result = document.evaluate("//div[contains(text(), \"Couldn't add\")]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            if (!confirmButton) {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Tombol Confirm tidak ditemukan.");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: false, message: "Confirm button not found" };
+                } else {
+                    retryCount++;
+                }
+            } else {
+                await confirmButton.click();
+                logger.info("✅ Berhasil klik tombol Confirm");
+            }
+
+        }
+
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Klik tombol "Add member" dalam modal konfirmasi
+            await page.waitForSelector('body');
+
+            const addMemberClicked = await page.evaluate(() => {
+                const xpath = "//span[text()='Add member']";
+                const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                 const el = result.singleNodeValue;
-                return el ? el.textContent : null;
+                if (el) {
+                    el.click();
+                    return true;
+                }
+                return false;
             });
 
-            if (errorText) {
-                logger.warn(`⚠️ Tidak bisa menambahkan nomor`);
+            if (!addMemberClicked) {
+                if (retryCount == maxRetries - 1) {
+                    logger.error("❌ Tombol 'Add member' di modal tidak ditemukan.");
+                    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
+                    await browser.close();
+                    return { success: false, message: "Add member in modal not found" };
+                } else {
+                    retryCount++;
+                }
+            } else {
+                logger.info("✅ Berhasil klik tombol 'Add member' dalam modal konfirmasi");
+            }
 
-                // Klik tombol Cancel agar dialog tertutup
-                const cancelClicked = await page.evaluate(() => {
-                    const result = document.evaluate("//span[text()='Cancel']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        }
+
+        await new Promise(r => setTimeout(r, 10 * 1000));
+
+        retryCount = 0;
+        maxRetries = 3;
+        while (retryCount < maxRetries) {
+            await new Promise(r => setTimeout(r, 5 * 1000));
+            // Tunggu kemungkinan munculnya pesan error "Couldn't add"
+            const privatedMessageFound = await page.waitForFunction(
+                () => !!document.evaluate("//div[contains(text(), \"Couldn't add\")]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue,
+                { timeout: 5000 }
+            ).catch(() => null);
+
+            if (privatedMessageFound) {
+                const errorText = await page.evaluate(() => {
+                    const result = document.evaluate("//div[contains(text(), \"Couldn't add\")]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                     const el = result.singleNodeValue;
-                    if (el) {
-                        el.click();
-                        return true;
-                    }
-                    return false;
+                    return el ? el.textContent : null;
                 });
 
-                if (cancelClicked) {
-                    logger.info("🟡 Dialog ditutup (Cancel ditekan).");
-                }
+                if (errorText) {
+                    if (retryCount == maxRetries - 1) {
+                        logger.warn(`⚠️ Tidak bisa menambahkan nomor`);
+                        await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
 
+                        // Klik tombol Cancel agar dialog tertutup
+                        const cancelClicked = await page.evaluate(() => {
+                            const result = document.evaluate("//span[text()='Cancel']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                            const el = result.singleNodeValue;
+                            if (el) {
+                                el.click();
+                                return true;
+                            }
+                            return false;
+                        });
+
+                        if (cancelClicked) {
+                            logger.info("🟡 Dialog ditutup (Cancel ditekan).");
+                        }
+
+                        await browser.close();
+                        return { success: true, message: "Private" };
+                    } else {
+                        retryCount++;
+                    }
+                }
+            } else {
                 await browser.close();
-                return { success: true, message: "Private" };
+                return { success: true, message: "Success" };
             }
         }
-        await browser.close();
-        return { success: true, message: "Success" };
     } catch (err) {
         await browser.close();
         logger.error("❌ Error bot:", err);
@@ -296,7 +389,7 @@ async function refreshQrLoop(workerId) {
 export async function closeWorker(workerId) {
     const logger = createLogger(workerId);
     const worker = workers.get(workerId);
-	try {
+    try {
         try {
             const browser = worker.browser;
             const pages = await browser.pages();
@@ -310,6 +403,10 @@ export async function closeWorker(workerId) {
         } catch (err) {
             console.error(`Browser not found. Worker ${workerId}:`, err);
         }
+        const profileDir = path.join("/data", 'profiles', `worker${workerId}`);
+        const command = `pkill -f "chrome --type=renderer --disable-dev-shm-usage --disable-gpu --no-sandbox --user-data-dir=${profileDir}"`;
+        await exec(command);
+
         const profilePath = `/data/profiles/worker${workerId}`;
         const locks = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
         for (const file of locks) {

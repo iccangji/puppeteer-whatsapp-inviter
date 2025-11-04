@@ -42,7 +42,7 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 } // 1 hour
+    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 7 days
   })
 );
 
@@ -540,16 +540,8 @@ app.get("/api/workers/:id/table/get-private", async (req, res) => {
     }
 
     const lines = [];
-    lines.push("========================================");
     privateRows.forEach((row, index) => {
-      lines.push(`Contact Name   : ${row.member || "-"}`);
-      lines.push(`Contact Phone  : ${row.phone || "-"}`);
-      lines.push(`Group          : ${row.group || "-"}`);
-      lines.push(`Status         : ${row.status || "-"}`);
-      lines.push(`Timestamp      : ${row.timestamp || "-"}`);
-      if (index < privateRows.length - 1) {
-        lines.push("----------------------------------------");
-      }
+      lines.push(`${row.phone || "-"}`);
     });
 
     lines.push("========================================");
