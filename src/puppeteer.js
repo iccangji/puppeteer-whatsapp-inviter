@@ -60,7 +60,7 @@ export async function puppeteerBot(workerId, data) {
         // WhatsApp Web
         logger.info("ℹ️ Membuka web WhatsApp...");
         await page.goto("https://web.whatsapp.com", { waitUntil: "domcontentloaded" });
-        await new Promise(r => setTimeout(r, 30 * 1000));
+        await new Promise(r => setTimeout(r, 180 * 1000));
 
         // logger.info("⏳ Tunggu 3 menit loading chat...");
         // await new Promise(r => setTimeout(r, 3 * 60 * 1000));
@@ -69,20 +69,15 @@ export async function puppeteerBot(workerId, data) {
         let retryCount = 0;
         const maxRetries = 3;
         while (retryCount < maxRetries) {
-            await new Promise(r => setTimeout(r, 10 * 1000));
+            await new Promise(r => setTimeout(r, 5 * 1000));
             const qrCanvas = await page.$('canvas[aria-label="Scan this QR code to link a device!"]');
             if (!qrCanvas) {
                 retryCount++;
-                if (retryCount < maxRetries) {
-                    continue;
-                } else {
-                    logger.error("❌ WA Suspended / Logged Out. Worker OFF.");
-                    await browser.close();
-                    return { success: false, message: "WA Suspended / Logged Out" };
-                }
+            } else {
+                logger.error("❌ WA Suspended / Logged Out. Worker OFF.");
+                await browser.close();
+                return { success: false, message: "WA Suspended / Logged Out" };
             }
-
-            break;
         }
 
         // Cari grup
@@ -90,6 +85,7 @@ export async function puppeteerBot(workerId, data) {
         const groupElement = await page.$(groupSelector);
 
         if (!groupElement) {
+	    await page.screenshot({ path: `/app/public/worker${workerId}-screenshot.png`, fullPage: true });
             logger.error(`❌ Group ${data.group} not found`);
             await browser.close();
             return { success: true, message: `Group not found` };
@@ -300,17 +296,20 @@ async function refreshQrLoop(workerId) {
 export async function closeWorker(workerId) {
     const logger = createLogger(workerId);
     const worker = workers.get(workerId);
-    try {
-        const browser = worker.browser;
-        const pages = await browser.pages();
-        for (const page of pages) {
-            try { await page.close({ runBeforeUnload: true }); } catch { }
+	try {
+        try {
+            const browser = worker.browser;
+            const pages = await browser.pages();
+            for (const page of pages) {
+                try { await page.close({ runBeforeUnload: true }); } catch { }
+            }
+
+            await new Promise((r) => setTimeout(r, 10000));
+
+            await browser.close();
+        } catch (err) {
+            console.error(`Browser not found. Worker ${workerId}:`, err);
         }
-
-        await browser.close();
-
-        await new Promise((r) => setTimeout(r, 1500));
-
         const profilePath = `/data/profiles/worker${workerId}`;
         const locks = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
         for (const file of locks) {
@@ -318,9 +317,11 @@ export async function closeWorker(workerId) {
             if (fs.existsSync(p)) fs.rmSync(p, { force: true });
         }
 
-        logger.info(`✅ Worker ${workerId} cleaned`);
+        console.log(`✅ Worker ${workerId} cleaned`);
 
-    } catch (err) { } finally {
+    } catch (err) {
+        console.error(`Error closing worker ${workerId}:`, err);
+    } finally {
         workers.delete(workerId);
     }
     return true;

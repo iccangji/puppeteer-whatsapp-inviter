@@ -99,7 +99,7 @@ while (true) {
           parentPort.postMessage({ id, done: true, message: result });
           break;
         }
-        if (message === "Sucess") {
+        if (message === "Success") {
           const delayMinutes = getDelayMinutes();
           logger.info(`⏳ Delay ${delayMinutes} minutes before next member`);
           await new Promise(r => setTimeout(r, delayMinutes * 60 * 1000));

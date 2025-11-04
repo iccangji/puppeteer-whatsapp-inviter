@@ -5,3 +5,4 @@
 /data/profiles/*
 /data/config/*
 /src/package-lock.json
+/src/public/*.png

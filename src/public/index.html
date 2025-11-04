@@ -205,6 +205,7 @@
       await fetch(`/api/workers/${id}/stop`, { method: 'POST' });
       document.getElementById('qr').innerHTML = '';
       alert(`Worker ${id} stopped`);
+      location.reload();
     }
 
     function upload(id) {
