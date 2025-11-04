@@ -543,8 +543,6 @@ app.get("/api/workers/:id/table/get-private", async (req, res) => {
     privateRows.forEach((row, index) => {
       lines.push(`${row.phone || "-"}`);
     });
-
-    lines.push("========================================");
     const txtContent = lines.join("\n");
     const tempTxtPath = path.join(inputsDir, `worker${id}-private.txt`);
     fs.writeFileSync(tempTxtPath, txtContent, "utf8");
