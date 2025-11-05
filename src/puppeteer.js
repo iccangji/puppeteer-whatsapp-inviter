@@ -196,6 +196,7 @@ export async function puppeteerBot(workerId, data) {
                 await page.type(searchInputSelector, contactName, { delay: 100 });
 
                 logger.info(`✅ Mengetik nama kontak: ${contactName}`);
+                break;
             }
         }
 
@@ -221,7 +222,7 @@ export async function puppeteerBot(workerId, data) {
                 // Klik elemen
                 await checkboxes[0].click();
                 logger.info("✅ Berhasil klik checkbox kontak");
-                await new Promise(r => setTimeout(r, 3 * 1000));
+                break;
             }
         }
 
@@ -247,6 +248,7 @@ export async function puppeteerBot(workerId, data) {
             } else {
                 await confirmButton.click();
                 logger.info("✅ Berhasil klik tombol Confirm");
+                break;
             }
 
         }
@@ -280,6 +282,7 @@ export async function puppeteerBot(workerId, data) {
                 }
             } else {
                 logger.info("✅ Berhasil klik tombol 'Add member' dalam modal konfirmasi");
+                break;
             }
 
         }
